@@ -2,7 +2,7 @@
 
 Paste a YouTube link in the web UI and download the extracted audio as an **MP3**.
 
-![App screenshot](docs/screenshot.png)
+![App screenshot](docs/example.png)
 
 ### Requirements
 
