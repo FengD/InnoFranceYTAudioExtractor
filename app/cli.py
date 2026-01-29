@@ -35,14 +35,50 @@ from app.core import AudioExtractor
     default=None,
     help="Output directory. If not specified, uses current directory.",
 )
-def main(url: str, audio_format: str, output_path: Path, output_dir: Path):
+@click.option(
+    "--cookies-file",
+    type=click.Path(path_type=Path, dir_okay=False),
+    default=None,
+    help="Path to a cookies.txt file exported from a browser.",
+)
+@click.option(
+    "--cookies-from-browser",
+    default=None,
+    help="Browser name for yt-dlp cookiesfrombrowser (e.g. chrome, firefox).",
+)
+@click.option(
+    "--user-agent",
+    default=None,
+    help="Custom User-Agent for yt-dlp requests.",
+)
+@click.option(
+    "--proxy",
+    default=None,
+    help="Proxy URL for yt-dlp requests.",
+)
+def main(
+    url: str,
+    audio_format: str,
+    output_path: Path,
+    output_dir: Path,
+    cookies_file: Path,
+    cookies_from_browser: str,
+    user_agent: str,
+    proxy: str,
+):
     """
     Extract audio from a YouTube URL.
 
     URL: YouTube video URL to extract audio from
     """
     try:
-        extractor = AudioExtractor(output_dir=output_dir or Path.cwd())
+        extractor = AudioExtractor(
+            output_dir=output_dir or Path.cwd(),
+            cookies_file=cookies_file,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+            proxy=proxy,
+        )
 
         if output_path:
             click.echo(f"Extracting audio to {output_path}...", err=True)

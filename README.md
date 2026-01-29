@@ -93,6 +93,10 @@ CLI options:
 - `--format`, `-f`: Audio format (mp3 or wav), default is mp3
 - `--output`, `-o`: Output file path
 - `--output-dir`, `-d`: Output directory (used when --output is not specified)
+- `--cookies-file`: Path to exported cookies.txt (helps with login / bot checks)
+- `--cookies-from-browser`: Use browser cookies (e.g. `chrome`, `firefox`)
+- `--user-agent`: Custom User-Agent
+- `--proxy`: Proxy URL
 
 ### MCP Server (stdio)
 
@@ -162,4 +166,7 @@ pytest tests/test_integration.py -v
 
 - This app uses `yt-dlp` to download audio and `ffmpeg` to convert formats.
 - Some videos may be unavailable due to region/age restrictions or DRM.
+- Environment overrides:
+  - `YT_COOKIES_FILE`, `YT_COOKIES_FROM_BROWSER`
+  - `YT_USER_AGENT`, `YT_PROXY`
 

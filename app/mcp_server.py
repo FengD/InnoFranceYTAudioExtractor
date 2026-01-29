@@ -17,6 +17,10 @@ def extract_audio(
     url: str,
     format: str = "mp3",
     output_path: Optional[str] = None,
+    cookies_file: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    proxy: Optional[str] = None,
 ) -> dict:
     """
     Extract audio from a YouTube URL.
@@ -30,7 +34,14 @@ def extract_audio(
         Dictionary with 'success', 'file_path', 'filename', and optional 'error' keys
     """
     try:
-        extractor = AudioExtractor()
+        extractor = AudioExtractor(
+            cookies_file=Path(cookies_file).expanduser().resolve()
+            if cookies_file
+            else None,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+            proxy=proxy,
+        )
 
         if output_path:
             output_file = Path(output_path)
@@ -69,6 +80,10 @@ def extract_audio_to_file(
     url: str,
     output_path: str,
     format: str = "mp3",
+    cookies_file: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    proxy: Optional[str] = None,
 ) -> dict:
     """
     Extract audio from a YouTube URL and save to a specific file path.
@@ -82,7 +97,14 @@ def extract_audio_to_file(
         Dictionary with 'success', 'file_path', 'filename', and optional 'error' keys
     """
     try:
-        extractor = AudioExtractor()
+        extractor = AudioExtractor(
+            cookies_file=Path(cookies_file).expanduser().resolve()
+            if cookies_file
+            else None,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+            proxy=proxy,
+        )
         output_file = Path(output_path)
         filename = extractor.extract_audio_to_file(url, output_file, format)
         return {

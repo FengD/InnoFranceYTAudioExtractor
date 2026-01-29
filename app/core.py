@@ -1,6 +1,7 @@
 """
 Core audio extraction module for YouTube URLs.
 """
+import os
 import re
 import shutil
 import tempfile
@@ -15,14 +16,67 @@ class AudioExtractor:
     Core class for extracting audio from YouTube URLs.
     """
 
-    def __init__(self, output_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        output_dir: Optional[Path] = None,
+        cookies_file: Optional[Path] = None,
+        cookies_from_browser: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        proxy: Optional[str] = None,
+    ):
         """
         Initialize the audio extractor.
 
         Args:
             output_dir: Optional directory to save output files. If None, uses temp directory.
+            cookies_file: Optional path to a Netscape cookies.txt file.
+            cookies_from_browser: Optional browser name for yt-dlp cookiesfrombrowser.
+            user_agent: Optional custom User-Agent.
+            proxy: Optional proxy URL.
         """
         self.output_dir = output_dir
+        self.cookies_file = cookies_file
+        self.cookies_from_browser = cookies_from_browser
+        self.user_agent = user_agent
+        self.proxy = proxy
+
+    @staticmethod
+    def _resolve_path(value: Optional[str]) -> Optional[Path]:
+        if not value:
+            return None
+        return Path(value).expanduser().resolve()
+
+    def _cookie_options(self) -> dict:
+        cookiefile = self.cookies_file or self._resolve_path(os.getenv("YT_COOKIES_FILE"))
+        cookies_from_browser = self.cookies_from_browser or os.getenv(
+            "YT_COOKIES_FROM_BROWSER"
+        )
+
+        options: dict[str, str] = {}
+        if cookiefile:
+            if not cookiefile.exists():
+                raise ValueError(f"Cookies file not found: {cookiefile}")
+            options["cookiefile"] = str(cookiefile)
+            return options
+
+        if cookies_from_browser:
+            options["cookiesfrombrowser"] = cookies_from_browser
+        return options
+
+    def _base_ydl_opts(self) -> dict:
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+        }
+        opts.update(self._cookie_options())
+        user_agent = self.user_agent or os.getenv("YT_USER_AGENT")
+        if user_agent:
+            opts["user_agent"] = user_agent
+        proxy = self.proxy or os.getenv("YT_PROXY")
+        if proxy:
+            opts["proxy"] = proxy
+        return opts
 
     @staticmethod
     def sanitize_filename(name: str, max_len: int = 120) -> str:
@@ -97,13 +151,7 @@ class AudioExtractor:
 
         try:
             # First get metadata (title) without downloading
-            with YoutubeDL(
-                {
-                    "quiet": True,
-                    "no_warnings": True,
-                    "noplaylist": True,
-                }
-            ) as ydl:
+            with YoutubeDL(self._base_ydl_opts()) as ydl:
                 info = ydl.extract_info(str(url), download=False)
 
             title = self.sanitize_filename(info.get("title") or "audio")
@@ -120,9 +168,7 @@ class AudioExtractor:
                 postprocessor["preferredquality"] = "192"
 
             ydl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "noplaylist": True,
+                **self._base_ydl_opts(),
                 "format": "bestaudio/best",
                 "outtmpl": outtmpl,
                 "postprocessors": [postprocessor],
