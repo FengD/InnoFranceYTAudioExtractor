@@ -101,8 +101,12 @@ CLI options:
 - `--output-dir`, `-d`: Output directory (used when --output is not specified)
 - `--cookies-file`: Path to exported cookies.txt (helps with login / bot checks)
 - `--cookies-from-browser`: Use browser cookies (e.g. `chrome`, `firefox`)
-- `--user-agent`: Custom User-Agent
-- `--proxy`: Proxy URL
+- `--list-formats`: List available formats and exit
+- `--check-cookies`: Check whether provided cookies can access the URL
+
+Notes on cookies:
+- `--check-cookies` validates the cookies file and then tries a metadata fetch
+- If it fails with `missing_login_cookies`, re-export cookies while logged in
 
 ### MCP Server (stdio)
 
@@ -155,8 +159,6 @@ The service logs caller identity, request details, and success/failure status.
 - **TRUST_PROXY_HEADERS**: set to `1` when running behind a proxy to trust `X-Forwarded-*`
 - **YT_COOKIES_FILE**: path to exported `cookies.txt` for authenticated downloads
 - **YT_COOKIES_FROM_BROWSER**: browser name (e.g. `chrome`, `firefox`) to read cookies
-- **YT_USER_AGENT**: custom User-Agent string for requests to YouTube
-- **YT_PROXY**: proxy URL (e.g. `http://user:pass@host:port`) for outbound requests
 - **RUN_YT_INTEGRATION**: set to `1` to enable integration tests
 - **YOUTUBE_TEST_URL**: URL used by integration tests (default in `tests/test_integration.py`)
 

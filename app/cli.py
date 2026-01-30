@@ -47,14 +47,16 @@ from app.core import AudioExtractor
     help="Browser name for yt-dlp cookiesfrombrowser (e.g. chrome, firefox).",
 )
 @click.option(
-    "--user-agent",
-    default=None,
-    help="Custom User-Agent for yt-dlp requests.",
+    "--list-formats",
+    is_flag=True,
+    default=False,
+    help="List available formats for the URL and exit.",
 )
 @click.option(
-    "--proxy",
-    default=None,
-    help="Proxy URL for yt-dlp requests.",
+    "--check-cookies",
+    is_flag=True,
+    default=False,
+    help="Check whether provided cookies can access the URL.",
 )
 def main(
     url: str,
@@ -63,8 +65,8 @@ def main(
     output_dir: Path,
     cookies_file: Path,
     cookies_from_browser: str,
-    user_agent: str,
-    proxy: str,
+    list_formats: bool,
+    check_cookies: bool,
 ):
     """
     Extract audio from a YouTube URL.
@@ -76,9 +78,60 @@ def main(
             output_dir=output_dir or Path.cwd(),
             cookies_file=cookies_file,
             cookies_from_browser=cookies_from_browser,
-            user_agent=user_agent,
-            proxy=proxy,
         )
+
+        if list_formats:
+            formats = extractor.list_formats(url)
+            if not formats:
+                click.echo("No formats found for this URL.", err=True)
+                sys.exit(1)
+
+            columns = [
+                ("format_id", "ID"),
+                ("ext", "EXT"),
+                ("acodec", "ACODEC"),
+                ("vcodec", "VCODEC"),
+                ("abr", "ABR"),
+                ("filesize", "SIZE"),
+                ("format_note", "NOTE"),
+            ]
+            header = [label for _, label in columns]
+            rows = []
+            for fmt in formats:
+                row = []
+                for key, _ in columns:
+                    value = fmt.get(key)
+                    if value is None:
+                        value = ""
+                    row.append(str(value))
+                rows.append(row)
+
+            col_widths = [
+                max(len(header[i]), *(len(r[i]) for r in rows)) for i in range(len(header))
+            ]
+            line = "  ".join(header[i].ljust(col_widths[i]) for i in range(len(header)))
+            click.echo(line)
+            click.echo("-" * len(line))
+            for row in rows:
+                click.echo(
+                    "  ".join(row[i].ljust(col_widths[i]) for i in range(len(row)))
+                )
+            sys.exit(0)
+
+        if check_cookies:
+            if cookies_file:
+                static_check = extractor.check_cookie_file(cookies_file)
+                if not static_check["ok"]:
+                    click.echo(f"FAILED: {static_check['reason']}", err=True)
+                    click.echo(static_check["detail"], err=True)
+                    sys.exit(1)
+            result = extractor.diagnose_access(url)
+            if result["ok"]:
+                click.echo(f"OK: {result['detail']}", err=True)
+                sys.exit(0)
+            click.echo(f"FAILED: {result['reason']}", err=True)
+            click.echo(result["detail"], err=True)
+            sys.exit(1)
 
         if output_path:
             click.echo(f"Extracting audio to {output_path}...", err=True)

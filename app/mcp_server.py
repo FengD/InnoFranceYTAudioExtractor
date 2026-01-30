@@ -25,8 +25,6 @@ def create_mcp(host: str, port: int) -> FastMCP:
         output_path: Optional[str] = None,
         cookies_file: Optional[str] = None,
         cookies_from_browser: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        proxy: Optional[str] = None,
     ) -> dict:
         """
         Extract audio from a YouTube URL.
@@ -45,8 +43,6 @@ def create_mcp(host: str, port: int) -> FastMCP:
                 if cookies_file
                 else None,
                 cookies_from_browser=cookies_from_browser,
-                user_agent=user_agent,
-                proxy=proxy,
             )
 
             if output_path:
@@ -87,8 +83,6 @@ def create_mcp(host: str, port: int) -> FastMCP:
         format: str = "mp3",
         cookies_file: Optional[str] = None,
         cookies_from_browser: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        proxy: Optional[str] = None,
     ) -> dict:
         """
         Extract audio from a YouTube URL and save to a specific file path.
@@ -107,8 +101,6 @@ def create_mcp(host: str, port: int) -> FastMCP:
                 if cookies_file
                 else None,
                 cookies_from_browser=cookies_from_browser,
-                user_agent=user_agent,
-                proxy=proxy,
             )
             output_file = Path(output_path)
             filename = extractor.extract_audio_to_file(url, output_file, format)

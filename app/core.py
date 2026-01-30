@@ -21,8 +21,6 @@ class AudioExtractor:
         output_dir: Optional[Path] = None,
         cookies_file: Optional[Path] = None,
         cookies_from_browser: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        proxy: Optional[str] = None,
     ):
         """
         Initialize the audio extractor.
@@ -37,8 +35,6 @@ class AudioExtractor:
         self.output_dir = output_dir
         self.cookies_file = cookies_file
         self.cookies_from_browser = cookies_from_browser
-        self.user_agent = user_agent
-        self.proxy = proxy
 
     @staticmethod
     def _resolve_path(value: Optional[str]) -> Optional[Path]:
@@ -68,15 +64,26 @@ class AudioExtractor:
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
+            "retries": 3,
+            "fragment_retries": 3,
         }
         opts.update(self._cookie_options())
-        user_agent = self.user_agent or os.getenv("YT_USER_AGENT")
-        if user_agent:
-            opts["user_agent"] = user_agent
-        proxy = self.proxy or os.getenv("YT_PROXY")
-        if proxy:
-            opts["proxy"] = proxy
         return opts
+
+    @staticmethod
+    def _is_empty_download_error(error: Exception) -> bool:
+        return "downloaded file is empty" in str(error).lower()
+
+    @staticmethod
+    def _with_android_player_client(ydl_opts: dict) -> dict:
+        updated = dict(ydl_opts)
+        extractor_args = dict(updated.get("extractor_args") or {})
+        youtube_args = dict(extractor_args.get("youtube") or {})
+        youtube_args.setdefault("player_client", ["android", "web"])
+        extractor_args["youtube"] = youtube_args
+        updated["extractor_args"] = extractor_args
+        return updated
+
 
     @staticmethod
     def sanitize_filename(name: str, max_len: int = 120) -> str:
@@ -174,24 +181,43 @@ class AudioExtractor:
                 "postprocessors": [postprocessor],
             }
 
-            with YoutubeDL(ydl_opts) as ydl:
-                ydl.download([str(url)])
+            try:
+                with YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([str(url)])
+            except Exception as download_error:
+                if not self._is_empty_download_error(download_error):
+                    raise
 
-            # Find the output file
+                retry_opts = self._with_android_player_client(ydl_opts)
+                try:
+                    with YoutubeDL(retry_opts) as ydl:
+                        ydl.download([str(url)])
+                except Exception as retry_error:
+                    raise RuntimeError(
+                        "YouTube returned an empty file. This is often caused by bot checks, "
+                        "age/region restrictions, or missing cookies. Try --cookies-from-browser "
+                        "or --cookies-file."
+                    ) from retry_error
+
+            expected_output = (
+                output_path if output_path else output_dir / f"{title}.{audio_format}"
+            )
+            if expected_output.exists() and expected_output.stat().st_size > 0:
+                filename = expected_output.name
+                return expected_output, filename
+
             output_file: Optional[Path] = None
             for p in output_dir.glob(f"*.{audio_format}"):
-                output_file = p
-                break
+                if p.exists() and p.stat().st_size > 0:
+                    output_file = p
+                    break
 
-            if not output_file or not output_file.exists():
+            if not output_file:
                 raise RuntimeError(
                     f"{audio_format.upper()} was not created. Is ffmpeg installed and available on PATH?"
                 )
 
-            filename = f"{title}.{audio_format}"
-
-            # If using temp directory, we'll return the temp file
-            # The caller is responsible for cleanup if use_temp is True
+            filename = output_file.name
             return output_file, filename
 
         except Exception as e:
@@ -200,6 +226,20 @@ class AudioExtractor:
             if isinstance(e, (ValueError, RuntimeError)):
                 raise
             raise RuntimeError(f"Failed to extract audio: {str(e)}") from e
+
+    def list_formats(self, url: str) -> list[dict]:
+        """
+        List available formats for a YouTube URL.
+
+        Args:
+            url: YouTube URL
+
+        Returns:
+            List of format dictionaries from yt-dlp
+        """
+        with YoutubeDL(self._base_ydl_opts()) as ydl:
+            info = ydl.extract_info(str(url), download=False)
+        return list(info.get("formats") or [])
 
     def extract_audio_to_file(
         self, url: str, output_file: Path, audio_format: str = "mp3"
@@ -221,6 +261,102 @@ class AudioExtractor:
         """
         _, filename = self.extract_audio(url, audio_format, output_path=output_file)
         return filename
+
+    @staticmethod
+    def check_cookie_file(cookie_file: Path) -> dict:
+        """
+        Lightweight validation for a Netscape cookies.txt file.
+        """
+        if not cookie_file.exists():
+            return {"ok": False, "reason": "missing_file", "detail": "Cookie file not found."}
+
+        try:
+            content = cookie_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            return {"ok": False, "reason": "read_error", "detail": str(e)}
+
+        domains = set()
+        names = set()
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < 7:
+                continue
+            domain = parts[0].lstrip(".").lower()
+            name = parts[5].strip()
+            if domain:
+                domains.add(domain)
+            if name:
+                names.add(name)
+
+        if not domains:
+            return {
+                "ok": False,
+                "reason": "empty",
+                "detail": "No cookies parsed from file.",
+            }
+
+        youtube_domains = [d for d in domains if "youtube.com" in d or "google.com" in d]
+        if not youtube_domains:
+            return {
+                "ok": False,
+                "reason": "no_youtube_cookies",
+                "detail": "No youtube.com/google.com cookies found in file.",
+            }
+
+        required = {
+            "SAPISID",
+            "SID",
+            "HSID",
+            "SSID",
+            "__Secure-1PSID",
+            "__Secure-3PSID",
+            "YSC",
+            "VISITOR_INFO1_LIVE",
+        }
+        missing = sorted(required - names)
+        if missing:
+            return {
+                "ok": False,
+                "reason": "missing_login_cookies",
+                "detail": f"Missing cookies: {', '.join(missing)}",
+            }
+
+        return {
+            "ok": True,
+            "reason": "ok",
+            "detail": "Cookie file looks like a logged-in export.",
+        }
+
+    def diagnose_access(self, url: str) -> dict:
+        """
+        Diagnose whether the current cookie settings can access the URL.
+
+        Returns:
+            Dict with keys: ok (bool), reason (str), detail (str)
+        """
+        try:
+            with YoutubeDL(self._base_ydl_opts()) as ydl:
+                info = ydl.extract_info(str(url), download=False)
+            title = info.get("title") if isinstance(info, dict) else None
+            return {
+                "ok": True,
+                "reason": "ok",
+                "detail": f"Accessible. Title: {title}" if title else "Accessible.",
+            }
+        except Exception as e:
+            message = str(e)
+            lowered = message.lower()
+            reason = "unknown"
+            if "sign in" in lowered or "login" in lowered:
+                reason = "auth_required"
+            elif "bot" in lowered or "not a bot" in lowered:
+                reason = "bot_check"
+            elif "unavailable" in lowered or "not available" in lowered:
+                reason = "not_available"
+            return {"ok": False, "reason": reason, "detail": message}
 
 
 def extract_audio(url: str, audio_format: str = "mp3", output_dir: Optional[Path] = None) -> Tuple[Path, str]:
