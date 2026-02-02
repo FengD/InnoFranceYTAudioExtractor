@@ -11,6 +11,14 @@ from typing import Optional, Tuple
 from yt_dlp import YoutubeDL
 
 
+class _SilentLogger:
+    def debug(self, msg): pass
+    def info(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): pass
+
+
+
 class AudioExtractor:
     """
     Core class for extracting audio from YouTube URLs.
@@ -66,6 +74,9 @@ class AudioExtractor:
             "noplaylist": True,
             "retries": 3,
             "fragment_retries": 3,
+            "logger": _SilentLogger(),
+            "progress_hooks": [],
+            "noprogress": True,
         }
         opts.update(self._cookie_options())
         return opts
@@ -176,7 +187,7 @@ class AudioExtractor:
 
             ydl_opts = {
                 **self._base_ydl_opts(),
-                "format": "bestaudio/best",
+                "format": "18",
                 "outtmpl": outtmpl,
                 "postprocessors": [postprocessor],
             }
